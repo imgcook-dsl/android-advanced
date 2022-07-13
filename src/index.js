@@ -66,7 +66,7 @@ function parseOptionSetting(opts) {
   }
 
   if (!opts.scale) {
-    SCALE_FACTOR = 2.0;
+    SCALE_FACTOR = 1.0;
   } else {
     if (opts.scale == SCALE_TYPE.SCALE_1) {
       SCALE_FACTOR = 1.0;
@@ -525,7 +525,7 @@ function resolveChildData(viewGroup, childData) {
       }
       if (viewType == VIEW_TYPE.VIEW && childView.overflow == 'hidden') {
         return;
-      }    
+      }
       if (childView != null) {
         childView.id = generateResId(viewType);
       }
@@ -1146,9 +1146,6 @@ function judgeGroupOrientation(viewGroup) {
       break;
     case ORIENTATION_TYPE.ABSOLUTE:
       viewGroup.viewType = VIEW_TYPE.LAYER;
-      if (!isValidValue(viewGroup.id) || viewGroup.id.indexOf('layer') == -1) {
-        viewGroup.id = generateResId(VIEW_TYPE.LAYER);
-      }
       viewGroup.children = viewGroup.childrenFromLeftTop;
       setFrameChildrenParams(viewGroup);
       break;
@@ -1224,8 +1221,17 @@ function setLinearChildrenParams(viewGroup, orientation) {
       if (child.viewType == VIEW_TYPE.LAYER) {
         child.marginLeft = undefined;
         child.marginTop = undefined;
+        if (orientation == ORIENTATION_TYPE.HORIZONTAL) {
+          baseRef = child.startToStart
+        } else {
+          baseRef = child.topToTop
+        }
+        if (isValidValue(baseRef) && baseRef.indexOf('@+id/') != -1) {
+          baseRef = baseRef.substring('@+id/'.length);
+        }
+      } else {
+        baseRef = child.id.toLowerCase()
       }
-      baseRef = child.id.toLowerCase()
     }
   }
 }
@@ -1235,26 +1241,14 @@ function setFrameChildrenParams(viewGroup) {
     let length = viewGroup.children.length;
     viewGroup.wrapContentWidth = true;
     viewGroup.wrapContentHeight = true;
-    viewGroup.marginLeft = undefined
-    viewGroup.marginTop = undefined
-    viewGroup.constraintTag = viewGroup.id
-    var firstChild = viewGroup.children[0]
-    if (firstChild.viewType != LAYOUT_TYPE.LAYER) {
-      firstChild.marginLeft = firstChild.left;
-      firstChild.marginTop = firstChild.top;
-    } else {
-      firstChild.marginLeft = undefined;
-      firstChild.marginTop = undefined;
-    }
-    firstChild.constraintTag = viewGroup.id
-    viewGroup.topToTop = '@+id/' + firstChild.id.toLowerCase()
-    viewGroup.startToStart = '@+id/' + firstChild.id.toLowerCase()
-    firstChild.startToEnd = viewGroup.startToEnd
-    firstChild.topToBottom = viewGroup.topToBottom
+    viewGroup.marginLeft = undefined;
+    viewGroup.marginTop = undefined;
+    viewGroup.constraintTag = viewGroup.id;
     if (length > 1) {
       let tempLeft = viewGroup.left;
       let tempTop = viewGroup.top;
-      for (var index = 1; index < length; index++) {
+      let found = false;
+      for (var index = 0; index < length; index++) {
         var child = viewGroup.children[index];
         child.constraintTag = viewGroup.id
         if (child.viewType != LAYOUT_TYPE.LAYER) {
@@ -1266,6 +1260,11 @@ function setFrameChildrenParams(viewGroup) {
         }
         child.startToEnd = viewGroup.startToEnd
         child.topToBottom = viewGroup.topToBottom
+        if (!found && (child.viewType != VIEW_TYPE.VIEW || isValidValue(child.backgroundColor))) {
+          viewGroup.topToTop = '@+id/' + child.id.toLowerCase()
+          viewGroup.startToStart = '@+id/' + child.id.toLowerCase()
+          found = true;
+        }
       }
     }
   }
@@ -1560,7 +1559,7 @@ View.prototype.exportBasicDSL = function () {
     }
     constrainedHorizontally = true
   }
-  if (isDefined(this.topToBottom)|| this.viewType == VIEW_TYPE.LAYER) {
+  if (isDefined(this.topToBottom) || this.viewType == VIEW_TYPE.LAYER) {
     if (this.viewType != VIEW_TYPE.LAYER) {
       attrs[getAttrsName('topToBottom')] = this.topToBottom;
     }
@@ -1761,7 +1760,6 @@ ViewGroup.sortChildren = function (viewGroup) {
 
 ViewGroup.prototype.exportDSL = function () {
   var result = '';
-
   let namespace = '';
   let layoutStartTag = '';
   let layoutEndTag = '';
@@ -1802,6 +1800,7 @@ ViewGroup.prototype.exportDSL = function () {
   } else {
     result += '>'
   }
+  let validChildNum = 0;
   if (this.children && this.children.length > 0) {
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
@@ -1810,6 +1809,7 @@ ViewGroup.prototype.exportDSL = function () {
         if (child.viewType == VIEW_TYPE.VIEW && !isValidValue(child.backgroundColor)) {
           continue;
         }
+        validChildNum++;
       }
       result += '\n\n';
       result += child.exportDSL();
@@ -1817,6 +1817,8 @@ ViewGroup.prototype.exportDSL = function () {
   }
   if (!layerType) {
     result += '\n\n' + parentIndent + layoutEndTag;
+  } else if (validChildNum == 0) {
+    return '';
   }
   return result;
 };
