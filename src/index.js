@@ -1243,14 +1243,18 @@ function setFrameChildrenParams(viewGroup) {
     viewGroup.wrapContentHeight = true;
     viewGroup.marginLeft = undefined;
     viewGroup.marginTop = undefined;
-    viewGroup.constraintTag = viewGroup.id;
+    if (isValidValue(viewGroup.backgroundColor)) {
+      viewGroup.constraintTag = viewGroup.id;
+    }
     if (length > 1) {
       let tempLeft = viewGroup.left;
       let tempTop = viewGroup.top;
       let found = false;
       for (var index = 0; index < length; index++) {
         var child = viewGroup.children[index];
-        child.constraintTag = viewGroup.id
+        if (isValidValue(viewGroup.backgroundColor)) {
+          child.constraintTag = viewGroup.id
+        }
         if (child.viewType != LAYOUT_TYPE.LAYER) {
           child.marginLeft = child.left;
           child.marginTop = child.top;
@@ -1778,8 +1782,12 @@ ViewGroup.prototype.exportDSL = function () {
   layoutStartTag = `<${getWidgetTag(this.viewType)} ${namespace}`;
   layoutEndTag = `</${getWidgetTag(this.viewType)}>`;
 
-  result += parentIndent + layoutStartTag;
   let layerType = this.viewType == VIEW_TYPE.LAYER
+  // 当Layer无背景时可以隐藏
+  let needShow = !layerType || isValidValue(this.backgroundColor)
+  if (needShow) {
+    result += parentIndent + layoutStartTag;
+  }
   attrs = this.exportBasicDSL();
   if (this.wrapContentWidth) {
     attrs[getAttrsName('width')] = getAttrsValue('match_content');
@@ -1794,11 +1802,13 @@ ViewGroup.prototype.exportDSL = function () {
   ) {
     attrs[getAttrsName('orientation')] = this.orientation;
   }
-  result += `${formatAttrs(attrs, getIndent(this.depth + 1))}`;
-  if (layerType) {
-    result += ' />'
-  } else {
-    result += '>'
+  if (needShow) {
+    result += `${formatAttrs(attrs, getIndent(this.depth + 1))}`;
+    if (layerType) {
+      result += ' />'
+    } else {
+      result += '>'
+    }
   }
   let validChildNum = 0;
   if (this.children && this.children.length > 0) {
