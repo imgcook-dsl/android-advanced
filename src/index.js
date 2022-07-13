@@ -1146,7 +1146,9 @@ function judgeGroupOrientation(viewGroup) {
       break;
     case ORIENTATION_TYPE.ABSOLUTE:
       viewGroup.viewType = VIEW_TYPE.LAYER;
-      viewGroup.id = generateResId(VIEW_TYPE.LAYER);
+      if (!isValidValue(viewGroup.id) || viewGroup.id.indexOf('layer') == -1) {
+        viewGroup.id = generateResId(VIEW_TYPE.LAYER);
+      }
       viewGroup.children = viewGroup.childrenFromLeftTop;
       setFrameChildrenParams(viewGroup);
       break;
@@ -1804,7 +1806,10 @@ ViewGroup.prototype.exportDSL = function () {
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
       if (layerType) {
-        child.depth = this.depth
+        child.depth = this.depth;
+        if (child.viewType == VIEW_TYPE.VIEW && !isValidValue(child.backgroundColor)) {
+          continue;
+        }
       }
       result += '\n\n';
       result += child.exportDSL();
