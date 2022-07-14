@@ -1769,9 +1769,9 @@ ViewGroup.prototype.exportDSL = function () {
   let layoutEndTag = '';
   let parentIndent = getIndent(this.depth);
   let attrs = {};
-
+  var xmlHeader = '';
   if (this.depth == 0) {
-    result += getXMLHeader();
+    xmlHeader = getXMLHeader();
     namespace = getNameSpace();
   }
 
@@ -1786,7 +1786,7 @@ ViewGroup.prototype.exportDSL = function () {
   // 当Layer无背景时可以隐藏
   let needShow = !layerType || isValidValue(this.backgroundColor)
   if (needShow) {
-    result += parentIndent + layoutStartTag;
+    result += xmlHeader + parentIndent + layoutStartTag;
   }
   attrs = this.exportBasicDSL();
   if (this.wrapContentWidth) {
