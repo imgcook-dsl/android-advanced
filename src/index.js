@@ -528,6 +528,7 @@ function resolveChildData(viewGroup, childData) {
       }
       if (childView != null) {
         childView.id = generateResId(viewType);
+        childView.parent = viewGroup;
       }
       if (childView && childView.left < viewGroup.left + viewGroup.width) {
         if (!childToParentBackground(childView, viewGroup)) {
@@ -1195,11 +1196,18 @@ function setLinearChildrenParams(viewGroup, orientation) {
     let tempTop = viewGroup.top;
     viewGroup.wrapContentWidth = true;
     viewGroup.wrapContentHeight = true;
-    let baseRef = 'parent'
+    let baseRef = 'parent';
+    var downsize = false;
     for (var index = 0; index < length; index++) {
       var child = viewGroup.children[index];
       child.marginLeft = Math.max(0, child.left - tempLeft);
       child.marginTop = Math.max(0, child.top - tempTop);
+      if (viewGroup.depth > 0 && index == 0 && !isValidValue(viewGroup.backgroundColor)) {
+        //第一个View且父布局没背景、非根布局
+        child.marginLeft = Math.max(0, child.left);
+        child.marginTop = Math.max(0, child.top);
+        downsize = true;
+      }
       child.gravity = undefined;
       if (orientation == ORIENTATION_TYPE.HORIZONTAL) {
         tempLeft += child.marginLeft + child.width;
@@ -1231,6 +1239,9 @@ function setLinearChildrenParams(viewGroup, orientation) {
         }
       } else {
         baseRef = child.id.toLowerCase()
+        if (downsize) {
+          child.constraintTag = viewGroup.constraintTag;
+        }
       }
     }
   }
@@ -1246,29 +1257,27 @@ function setFrameChildrenParams(viewGroup) {
     if (isValidValue(viewGroup.backgroundColor)) {
       viewGroup.constraintTag = viewGroup.id;
     }
-    if (length > 1) {
-      let tempLeft = viewGroup.left;
-      let tempTop = viewGroup.top;
-      let found = false;
-      for (var index = 0; index < length; index++) {
-        var child = viewGroup.children[index];
-        if (isValidValue(viewGroup.backgroundColor)) {
-          child.constraintTag = viewGroup.id
-        }
-        if (child.viewType != LAYOUT_TYPE.LAYER) {
-          child.marginLeft = child.left;
-          child.marginTop = child.top;
-        } else {
-          child.marginLeft = undefined;
-          child.marginTop = undefined;
-        }
-        child.startToEnd = viewGroup.startToEnd
-        child.topToBottom = viewGroup.topToBottom
-        if (!found && (child.viewType != VIEW_TYPE.VIEW || isValidValue(child.backgroundColor))) {
-          viewGroup.topToTop = '@+id/' + child.id.toLowerCase()
-          viewGroup.startToStart = '@+id/' + child.id.toLowerCase()
-          found = true;
-        }
+    let tempLeft = viewGroup.left;
+    let tempTop = viewGroup.top;
+    let found = false;
+    for (var index = 0; index < length; index++) {
+      var child = viewGroup.children[index];
+      if (isValidValue(viewGroup.backgroundColor)) {
+        child.constraintTag = viewGroup.id
+      }
+      if (child.viewType != LAYOUT_TYPE.LAYER) {
+        child.marginLeft = child.left;
+        child.marginTop = child.top;
+      } else {
+        child.marginLeft = undefined;
+        child.marginTop = undefined;
+      }
+      child.startToEnd = viewGroup.startToEnd
+      child.topToBottom = viewGroup.topToBottom
+      if (!found && (child.viewType != VIEW_TYPE.VIEW || isValidValue(child.backgroundColor))) {
+        viewGroup.topToTop = '@+id/' + child.id.toLowerCase()
+        viewGroup.startToStart = '@+id/' + child.id.toLowerCase()
+        found = true;
       }
     }
   }
@@ -1350,6 +1359,10 @@ var View = function () {
   var topToTop;
   var startToEnd;
   var topToBottom;
+  /**
+   * 父布局
+   */
+  var parent;
 };
 
 View.create = function (propsJsonData) {
@@ -1785,7 +1798,10 @@ ViewGroup.prototype.exportDSL = function () {
   let layerType = this.viewType == VIEW_TYPE.LAYER
   // 当Layer无背景时可以隐藏
   let needShow = !layerType || isValidValue(this.backgroundColor)
-  if (needShow) {
+  //多余的父布局
+  let spare = this.depth > 0 && this.viewType == LAYOUT_TYPE.CONSTRAINTLAYOUT && !isValidValue(this.backgroundColor)
+  let downsize = layerType || spare
+  if (needShow && !spare) {
     result += xmlHeader + parentIndent + layoutStartTag;
   }
   attrs = this.exportBasicDSL();
@@ -1802,7 +1818,7 @@ ViewGroup.prototype.exportDSL = function () {
   ) {
     attrs[getAttrsName('orientation')] = this.orientation;
   }
-  if (needShow) {
+  if (!spare && needShow) {
     result += `${formatAttrs(attrs, getIndent(this.depth + 1))}`;
     if (layerType) {
       result += ' />'
@@ -1815,20 +1831,31 @@ ViewGroup.prototype.exportDSL = function () {
     for (var i = 0; i < this.children.length; i++) {
       var child = this.children[i];
       if (layerType) {
-        child.depth = this.depth;
         if (child.viewType == VIEW_TYPE.VIEW && !isValidValue(child.backgroundColor)) {
           continue;
         }
         validChildNum++;
       }
-      result += '\n\n';
-      result += child.exportDSL();
+      if (downsize) {
+        child.depth = this.depth;
+      }
+      let childDSL = child.exportDSL();
+      if (isValidValue(childDSL)) {
+        if (!spare || i > 0) {
+          result += '\n\n';
+        }
+        result += childDSL;
+      } else {
+        result += '\n';
+      }
     }
   }
-  if (!layerType) {
-    result += '\n\n' + parentIndent + layoutEndTag;
-  } else if (validChildNum == 0) {
-    return '';
+  if (!spare) {
+    if (!layerType) {
+      result += '\n\n' + parentIndent + layoutEndTag;
+    } else if (validChildNum == 0) {
+      return '';
+    }
   }
   return result;
 };
